@@ -8,6 +8,8 @@ repository = "https://github.com/BitFlaker/edf-rs"
 readme = "README.md"
 
 description = "Pure Rust implementation of a reader and writer for EDF/EDF+ (European Data Format) files"
+keywords = ["European-Data-Format", "EDF+", "EDF-File", "EEG", "signal"]
+categories = ["science::bioinformatics", "science::neuroscience", "filesystem", "parsing"]
 
 edition = "2024"
 
