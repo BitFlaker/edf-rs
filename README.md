@@ -26,7 +26,9 @@ Here is a non-exhaustive list of all implemented and planned features for this l
 ┊ &nbsp; Additional features (e.g. merging files, etc.)
 
 ----
-▉ &nbsp;Implemented&nbsp;&nbsp; ▒ &nbsp;In progress&nbsp;&nbsp; ┊ &nbsp;Planned
+&nbsp;&nbsp;&nbsp; ▉ &nbsp;Implemented&nbsp;&nbsp;&nbsp; ▒ &nbsp;In progress&nbsp;&nbsp;&nbsp; ┊ &nbsp;Planned
+
+----
 
 ## 🚀 Usage
 The code snippet below shows how to open an EDF+ file, print the metadata and read the first few data-records.
