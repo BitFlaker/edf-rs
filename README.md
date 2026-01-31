@@ -1,5 +1,7 @@
 # Rust EDF 
 
+![Crates.io Version](https://img.shields.io/crates/v/edf-rs)
+![docs.rs](https://img.shields.io/docsrs/edf-rs)
 ![GitHub License](https://img.shields.io/github/license/BitFlaker/edf-rs)
 ![GitHub repo size](https://img.shields.io/github/repo-size/BitFlaker/edf-rs)
 ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/BitFlaker/edf-rs)
@@ -9,23 +11,24 @@ A pure Rust library for reading and writing EDF/EDF+ files. It aims at providing
 
 **This library is an unofficial implementation. It is still in an early development stage which is not yet considered stable and will have breaking changes in the future.**
 
-## Features
+## ✨ Features
 Here is a non-exhaustive list of all implemented and planned features for this library:
 
-✅ Reading EDF/EDF+ files
-✅ Creating / Updating existing EDF/EDF+ files \
-✅ Adding / Removing / Updating existing records and signals \
-✅ Support for seeking \
-✅ Reading data by custom duration (nanoseconds, seconds, etc.) \
-🚧 Extensive documentation \
-🚧 Examples \
-🗓️ Support for BDF/BDF+ files and EDF extensions \
-🗓️ Conversion from (and maybe to) other formats (e.g. [OpenBCI Recordings](https://docs.openbci.com/Software/OpenBCISoftware/GUIDocs/#exported-data)) \
-🗓️ Additional features (e.g. merging files, etc.)
+▉ &nbsp; Reading EDF/EDF+ files \
+▉ &nbsp; Creating / Updating existing EDF/EDF+ files \
+▉ &nbsp; Adding / Removing / Updating existing records and signals \
+▉ &nbsp; Support for seeking \
+▉ &nbsp; Reading data by custom duration (nanoseconds, seconds, etc.) \
+▒ &nbsp; Extensive documentation \
+▒ &nbsp; Examples \
+┊ &nbsp; Support for BDF/BDF+ files and EDF extensions \
+┊ &nbsp; Conversion from (and maybe to) other formats (e.g. [OpenBCI Recordings](https://docs.openbci.com/Software/OpenBCISoftware/GUIDocs/#exported-data)) \
+┊ &nbsp; Additional features (e.g. merging files, etc.)
 
-> **Legend:**&nbsp;&nbsp; ✅ Implemented&nbsp;&nbsp; 🚧 In progress&nbsp;&nbsp; 🗓️ Planned
+----
+▉ &nbsp;Implemented&nbsp;&nbsp; ▒ &nbsp;In progress&nbsp;&nbsp; ┊ &nbsp;Planned
 
-## Usage
+## 🚀 Usage
 The code snippet below shows how to open an EDF+ file, print the metadata and read the first few data-records.
 
 ```rust
@@ -66,7 +69,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## ⚠️ Disclaimer
 I (the developer of this tool) am not a scientist, doctor or similar. I am just a programmer who maintains this tool as a hobby because it is the application I wish existed. This means it is possible that some features of this tool do not work as they should (due to lack of scientific knowledge or similar). This tool is not intended for medical treatment or diagnosis. This software is offered "as is" and it could contain errors, bugs or vulnerabilities which could lead to unexpected or undesirable consequences. If you encounter such problems, feel free to report them in the [issues](https://github.com/BitFlaker/edf-rs/issues) section. Keep in mind that this application is still in a very early development stage and not yet considered stable. I cannot and do not accept any liability for damages related to the use of this software. Use it at your own risk.
 
-## Contributing
+## 👥 Contributing
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as below, without any additional terms or conditions.
 
 ## 📜 License
