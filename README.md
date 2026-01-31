@@ -1,7 +1,7 @@
 # Rust EDF 
 
-![Crates.io Version](https://img.shields.io/crates/v/edf-rs)
-![docs.rs](https://img.shields.io/docsrs/edf-rs)
+[![Crates.io Version](https://img.shields.io/crates/v/edf-rs)](https://crates.io/crates/edf-rs)
+[![docs.rs](https://img.shields.io/docsrs/edf-rs)](https://docs.rs/edf-rs/latest/edf_rs/)
 ![GitHub License](https://img.shields.io/github/license/BitFlaker/edf-rs)
 ![GitHub repo size](https://img.shields.io/github/repo-size/BitFlaker/edf-rs)
 ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/BitFlaker/edf-rs)
