@@ -84,7 +84,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn generate_record(edf: &EDFFile, index: usize) -> Record {
     let mut record = edf.header.create_record();
-    record.signal_samples = vec![
+    record.raw_signal_samples = vec![
         (0..100).collect()
     ];
     record.annotations = vec![vec![
@@ -129,7 +129,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Do something with the signals. The order of the signals
         // is the same as the signals in the header
-        let max_signal_values: Vec<i16> = record.signal_samples.into_iter()
+        let max_signal_values: Vec<i16> = record.raw_signal_samples.into_iter()
             .map(|samples| samples.into_iter().max().unwrap_or(0))
             .collect();
         println!("Max values: {:?}", max_signal_values)

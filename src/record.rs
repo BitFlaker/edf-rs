@@ -22,13 +22,13 @@ enum SignalType {
 pub struct Record {
     layout: RecordLayout,
     pub(crate) default_offset: f64,
-    pub signal_samples: Vec<Vec<i16>>,
+    pub raw_signal_samples: Vec<Vec<i16>>,
     pub annotations: Vec<Vec<AnnotationList>>,
 }
 
 impl Record {
     pub fn new(signal_headers: &Vec<SignalHeader>) -> Self {
-        let mut signal_samples = Vec::new();
+        let mut raw_signal_samples = Vec::new();
         let mut annotations = Vec::new();
         let mut annotation_samples_count = Vec::new();
         let mut signal_map = HashMap::new();
@@ -38,8 +38,8 @@ impl Record {
                 annotation_samples_count.push(signal.samples_count);
                 annotations.push(Vec::new());
             } else {
-                signal_map.insert(i, SignalType::Samples(signal_samples.len()));
-                signal_samples.push(vec![0; signal.samples_count]);
+                signal_map.insert(i, SignalType::Samples(raw_signal_samples.len()));
+                raw_signal_samples.push(vec![0; signal.samples_count]);
             }
         }
 
@@ -49,7 +49,7 @@ impl Record {
                 annotation_samples_count,
             },
             default_offset: 0.0,
-            signal_samples,
+            raw_signal_samples,
             annotations,
         }
     }
@@ -116,7 +116,7 @@ impl Record {
             .insert(signal_index, SignalType::Samples(insert_idx));
 
         // Insert the new annotation signal values
-        self.signal_samples
+        self.raw_signal_samples
             .insert(insert_idx, vec![0; samples_count]);
 
         Ok(())
@@ -154,7 +154,7 @@ impl Record {
     pub fn remove_signal(&mut self, signal_index: usize) -> Result<(), EDFError> {
         match self.layout.signal_map.remove(&signal_index) {
             Some(SignalType::Samples(idx)) => {
-                self.signal_samples.remove(idx);
+                self.raw_signal_samples.remove(idx);
                 self.apply_index_change_samples(signal_index, idx, -1);
             }
             Some(SignalType::Annotation(idx)) => {
@@ -175,7 +175,7 @@ impl Record {
     ) -> Result<(), EDFError> {
         match self.layout.signal_map.get(&signal_index) {
             Some(SignalType::Samples(idx)) => {
-                if let Some(count) = self.signal_samples.get_mut(*idx) {
+                if let Some(count) = self.raw_signal_samples.get_mut(*idx) {
                     count.resize(samples_count, 0);
                 } else {
                     return Err(EDFError::ItemNotFound);
@@ -217,7 +217,7 @@ impl Record {
             return Err(EDFError::ItemNotFound);
         };
 
-        let Some(old_samples) = self.signal_samples.get_mut(*idx) else {
+        let Some(old_samples) = self.raw_signal_samples.get_mut(*idx) else {
             return Err(EDFError::ItemNotFound);
         };
 
@@ -228,6 +228,27 @@ impl Record {
         *old_samples = samples;
 
         Ok(())
+    }
+
+    pub fn get_digital_samples(&self, signal: &SignalHeader) -> Vec<Vec<i32>> {
+        self.raw_signal_samples.iter().map(|signals| {
+            signals.iter().map(|sample| {
+                (*sample as i32).clamp(signal.digital_minimum, signal.digital_maximum)
+            }).collect()
+        }).collect()
+    }
+
+    pub fn get_physical_samples(&self, signal: &SignalHeader) -> Vec<Vec<f64>> {
+        let range = (signal.physical_maximum - signal.physical_minimum) / (signal.digital_maximum - signal.digital_minimum) as f64;
+        let offset = signal.physical_maximum / range - signal.digital_maximum as f64;
+
+        self.raw_signal_samples.iter().map(|signals| {
+            signals.iter().map(|sample| {
+                let digital = *sample as f64;
+                let physical = range * (offset + digital);
+                physical.clamp(signal.physical_minimum, signal.physical_maximum)
+            }).collect()
+        }).collect()
     }
 
     fn apply_index_change_annotation(
@@ -307,7 +328,7 @@ impl Record {
                     }
                 }
                 Some(SignalType::Samples(idx)) => {
-                    if let Some(signal) = self.signal_samples.get(*idx) {
+                    if let Some(signal) = self.raw_signal_samples.get(*idx) {
                         result_buffer.extend(
                             &signal
                                 .into_iter()
@@ -328,7 +349,7 @@ impl Record {
 
     pub fn matches_signals(&self, signal_headers: &Vec<SignalHeader>) -> bool {
         // Validate the signal count of the record matches the provided signal header count
-        let actual_count = self.annotations.len() + self.signal_samples.len();
+        let actual_count = self.annotations.len() + self.raw_signal_samples.len();
         if actual_count != signal_headers.len()
             || actual_count != self.layout.signal_map.len()
             || actual_count
@@ -348,7 +369,7 @@ impl Record {
             match self.layout.signal_map.get(&i) {
                 Some(SignalType::Samples(idx)) => {
                     if !self
-                        .signal_samples
+                        .raw_signal_samples
                         .get(*idx)
                         .is_some_and(|s| s.len() == signal_headers[i].samples_count)
                     {
@@ -376,21 +397,38 @@ impl Record {
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct RelativeRecordData {
     pub offset: f64,
-    pub signal_samples: Vec<i16>,
+    pub raw_signal_samples: Vec<i16>,
 }
 
 impl RelativeRecordData {
     pub fn new(offset: f64) -> Self {
         Self {
             offset,
-            signal_samples: Vec::new(),
+            raw_signal_samples: Vec::new(),
         }
+    }
+
+    pub fn get_digital_samples(&self, signal: &SignalHeader) -> Vec<i32> {
+        self.raw_signal_samples.iter().map(|sample| {
+            (*sample as i32).clamp(signal.digital_minimum, signal.digital_maximum)
+        }).collect()
+    }
+
+    pub fn get_physical_samples(&self, signal: &SignalHeader) -> Vec<f64> {
+        let range = (signal.physical_maximum - signal.physical_minimum) / (signal.digital_maximum - signal.digital_minimum) as f64;
+        let offset = signal.physical_maximum / range - signal.digital_maximum as f64;
+
+        self.raw_signal_samples.iter().map(|sample| {
+            let digital = *sample as f64;
+            let physical = range * (offset + digital);
+            physical.clamp(signal.physical_minimum, signal.physical_maximum)
+        }).collect()
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct SpanningRecord {
-    pub signal_samples: Vec<Vec<RelativeRecordData>>,
+    pub raw_signal_samples: Vec<Vec<RelativeRecordData>>,
     pub annotations: Vec<Vec<AnnotationList>>,
 }
 
@@ -398,20 +436,20 @@ impl SpanningRecord {
     pub fn new(header: &EDFHeader) -> Self {
         let signal_count = header.signals.iter().filter(|s| !s.is_annotation()).count();
         Self {
-            signal_samples: vec![Vec::new(); signal_count],
+            raw_signal_samples: vec![Vec::new(); signal_count],
             annotations: Vec::new(),
         }
     }
 
     pub fn is_spanning_wait(&self) -> bool {
-        self.signal_samples
+        self.raw_signal_samples
             .iter()
-            .all(|sp| sp.last().is_some_and(|data| data.signal_samples.is_empty()))
+            .all(|sp| sp.last().is_some_and(|data| data.raw_signal_samples.is_empty()))
     }
 
     pub fn remove_last_spanning_wait(&mut self) -> bool {
         if self.is_spanning_wait() {
-            for signal in &mut self.signal_samples {
+            for signal in &mut self.raw_signal_samples {
                 signal.remove(signal.len() - 1);
             }
 
@@ -425,7 +463,7 @@ impl SpanningRecord {
 
         // Check if the last spanning entry is the same offset
         if self
-            .signal_samples
+            .raw_signal_samples
             .first()
             .map(|s| s.last())
             .flatten()
@@ -435,7 +473,7 @@ impl SpanningRecord {
         }
 
         // In case it is a new offset, insert the new spanning values
-        for signal in &mut self.signal_samples {
+        for signal in &mut self.raw_signal_samples {
             signal.push(RelativeRecordData::new(offset));
         }
     }
@@ -447,9 +485,9 @@ impl SpanningRecord {
     }
 
     pub fn extend_samples(&mut self, signal_index: usize, samples: Vec<i16>) {
-        if let Some(signal) = self.signal_samples.get_mut(signal_index) {
+        if let Some(signal) = self.raw_signal_samples.get_mut(signal_index) {
             if let Some(data) = signal.last_mut() {
-                data.signal_samples.extend(samples);
+                data.raw_signal_samples.extend(samples);
             }
         }
     }

@@ -852,7 +852,7 @@ impl EDFFile {
             }
 
             let sample_frequencies = record
-                .signal_samples
+                .raw_signal_samples
                 .iter()
                 .map(|s| s.len() as f64 / self.header.record_duration)
                 .collect::<Vec<_>>();
@@ -867,7 +867,7 @@ impl EDFFile {
                 // Drop samples and annotations before and not lasting until the current offset
                 if self.record_read_offset_ns > 0 {
                     // Remove all signal samples which are before the current read offset
-                    for signal in record.signal_samples.iter_mut() {
+                    for signal in record.raw_signal_samples.iter_mut() {
                         let sample_freq = signal.len() as f64 / self.header.record_duration;
                         let sample_count = (self.record_read_offset_ns as f64 / 1_000_000_000.0
                             * sample_freq)
@@ -915,7 +915,7 @@ impl EDFFile {
             remaining_record_ns = offset_end - offset_current;
             let record_remaining_ns = record_duration_ns - self.record_read_offset_ns;
             if remaining_record_ns >= record_remaining_ns {
-                for (i, signal) in record.signal_samples.iter().enumerate() {
+                for (i, signal) in record.raw_signal_samples.iter().enumerate() {
                     records.extend_samples(i, signal.to_vec())
                 }
 
@@ -926,7 +926,7 @@ impl EDFFile {
                 // Reading the record has finished and therefore the next record should be read from the start again
                 self.record_read_offset_ns = 0;
             } else {
-                for (i, signal) in record.signal_samples.iter().enumerate() {
+                for (i, signal) in record.raw_signal_samples.iter().enumerate() {
                     let sample_freq = sample_frequencies[i];
                     let prev_sample_count =
                         self.record_read_offset_ns as f64 / 1_000_000_000.0 * sample_freq;
