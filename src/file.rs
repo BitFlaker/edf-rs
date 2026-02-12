@@ -59,6 +59,7 @@ pub struct EDFFile {
     path: PathBuf,
     reader: BufReader<File>,
     record_read_offset_ns: u128,
+    gap_read_offset_ns: u128,
     instructions: Vec<SaveInstruction>,
     signal_instructions: Vec<SaveInstruction>,
     record_counter: usize,
@@ -78,6 +79,7 @@ impl EDFFile {
             signal_counter: header.signal_count,
             path: path.as_ref().to_path_buf(),
             record_read_offset_ns: 0,
+            gap_read_offset_ns: 0,
             signal_instructions: Vec::new(),
             instructions: Vec::new(),
             header,
@@ -103,6 +105,7 @@ impl EDFFile {
             reader,
             path: path.as_ref().to_path_buf(),
             record_read_offset_ns: 0,
+            gap_read_offset_ns: 0,
             signal_counter: 0,
             record_counter: 0,
             signal_instructions: Vec::new(),
@@ -703,7 +706,7 @@ impl EDFFile {
         )?;
 
         // Patch the record to match the new signal definitions
-        record.patch_record(&self.instructions)?;
+        record.patch_record(&self.signal_instructions)?;
 
         Ok(Some(record))
     }
@@ -841,7 +844,7 @@ impl EDFFile {
             let skip_duration_ns = if self.header.specification == EDFSpecifications::EDF {
                 0
             } else if let Some(previous_onset) = &read_start_ns {
-                onset - previous_onset - record_duration_ns
+                onset - previous_onset - record_duration_ns - self.gap_read_offset_ns
             } else {
                 let already_skipped = onset - offset_current;
                 onset - already_skipped
@@ -869,9 +872,7 @@ impl EDFFile {
                     // Remove all signal samples which are before the current read offset
                     for signal in record.raw_signal_samples.iter_mut() {
                         let sample_freq = signal.len() as f64 / self.header.record_duration;
-                        let sample_count = (self.record_read_offset_ns as f64 / 1_000_000_000.0
-                            * sample_freq)
-                            .floor() as usize;
+                        let sample_count = (nanoseconds as f64 / 1_000_000_000.0 * sample_freq).floor() as usize;
                         signal.drain(..sample_count);
                     }
 
@@ -908,8 +909,10 @@ impl EDFFile {
             offset_current += skip_duration_ns;
             if offset_current >= offset_end {
                 self.seek_previous_record()?;
+                self.gap_read_offset_ns += nanoseconds;
                 break;
             }
+            self.gap_read_offset_ns = 0;
 
             // Take the desired amount of samples from the current record
             remaining_record_ns = offset_end - offset_current;
