@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader, Cursor, Seek, SeekFrom, Write};
 use std::iter::repeat_n;
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crate::EDFSpecifications;
 use crate::error::edf_error::EDFError;
@@ -661,6 +662,74 @@ impl EDFFile {
         }
 
         Ok(())
+    }
+
+    /// Gets the duration of the recording by multiplying the record duration with the
+    /// record count. Note that this is not the actual duration in discontinuous files.
+    /// For those scenarios, use the [`read_file_duration()`] function
+    pub fn get_continuous_file_duration(&self) -> Duration {
+        let nanos = self.header.record_count
+            .map(|c| c as u128 * (self.header.record_duration * 1_000_000_000.0) as u128)
+            .unwrap_or(0);
+
+        Duration::from_nanos(nanos as u64)
+    }
+
+    /// Tries to get the duration of the file by either the same approach as [`get_continuous_file_duration()`] for EDF files.
+    /// In case of an EDF+ file, it will read the last record and return the duration until the end of the last record.
+    /// The latter assumes that all data records are sorted by time in chronological order.
+    pub fn read_file_duration(&mut self) -> Result<Duration, EDFError> {
+        match self.header.specification {
+            EDFSpecifications::EDF => Ok(self.get_continuous_file_duration()),
+            EDFSpecifications::EDFPlus => {
+                let gap_read_offset_ns = self.gap_read_offset_ns;
+                let record_read_offset_ns = self.record_read_offset_ns;
+                let reader_pos = self.reader.stream_position().map_err(EDFError::FileReadError)?;
+
+                // Reset closure which returns a zero duration on success
+                let reset_reader = |reader: &mut BufReader<File>| {
+                    reader
+                        .seek(SeekFrom::Start(reader_pos))
+                        .map_err(EDFError::FileReadError)
+                        .map(|_| Duration::ZERO)
+                };
+
+                // No actual file duration available as the file is still in recording mode
+                let Some(record_count) = self.header.record_count else {
+                    return Ok(Duration::ZERO);
+                };
+
+                // Seek to the beginning of the last record
+                self.reader
+                    .seek(SeekFrom::Start(self.header.header_bytes as u64 + record_count.saturating_sub(1) as u64 * self.header.data_record_bytes() as u64))
+                    .map_err(EDFError::FileReadError)?;
+
+                // Read the last record
+                let Some(record) = self.read_record()? else {
+                    self.gap_read_offset_ns = gap_read_offset_ns;
+                    self.record_read_offset_ns = record_read_offset_ns;
+                    return reset_reader(&mut self.reader);
+                };
+
+                // Get the first `EDF Annotations` signal which has the Time-keeping annotation
+                let Some(tal) = record.annotations.iter().find_map(|l| l.first().filter(|a| a.is_time_keeping())) else {
+                    self.gap_read_offset_ns = gap_read_offset_ns;
+                    self.record_read_offset_ns = record_read_offset_ns;
+                    return reset_reader(&mut self.reader);
+                };
+
+                // The final file duration has to be the onset plus the duration of the last record
+                let onset_nanos = (tal.onset * 1_000_000_000.0) as u128;
+                let file_nanos = onset_nanos + (self.header.record_duration * 1_000_000_000.0) as u128;
+
+                // Reset the reader back to the previous position
+                self.gap_read_offset_ns = gap_read_offset_ns;
+                self.record_read_offset_ns = record_read_offset_ns;
+                reset_reader(&mut self.reader)?;
+
+                Ok(Duration::from_nanos(file_nanos as u64))
+            }
+        }
     }
 
     pub fn read_record(&mut self) -> Result<Option<Record>, EDFError> {
