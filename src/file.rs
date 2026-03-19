@@ -1,9 +1,11 @@
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Cursor, Seek, SeekFrom, Write};
 use std::iter::repeat_n;
-use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+#[cfg(unix)]
+use std::os::unix::fs::FileExt;
 
 use crate::EDFSpecifications;
 use crate::error::edf_error::EDFError;
@@ -403,7 +405,7 @@ impl EDFFile {
                         let read_length = read_length.min(read_max as usize);
                         if read_length > 0 {
                             let mut buffer = vec![0; read_length]; // TODO: This should be a function global defined buffer
-                            file.read_exact_at(&mut buffer, initial_header_size)
+                            seek_read_exact_at(&mut file, &mut buffer, initial_header_size)
                                 .map_err(EDFError::FileWriteError)?;
                             overwrite_buffer.append(&mut buffer);
                         }
@@ -453,7 +455,7 @@ impl EDFFile {
                         let read_length = read_length.min(read_max as usize);
                         if read_length > 0 {
                             let mut buffer = vec![0; read_length]; // TODO: This should be a function global defined buffer
-                            file.read_exact_at(&mut buffer, current_file_position)
+                            seek_read_exact_at(&mut file, &mut buffer, current_file_position)
                                 .map_err(EDFError::FileWriteError)?;
                             overwrite_buffer.append(&mut buffer);
                         }
@@ -496,7 +498,8 @@ impl EDFFile {
                         .unwrap_or(0) as usize;
                     if read_length > 0 {
                         let mut buffer = vec![0; read_length]; // TODO: This should be a function global defined buffer
-                        file.read_exact_at(
+                        seek_read_exact_at(
+                            &mut file, 
                             &mut buffer,
                             current_file_position + disk_read_count as u64,
                         )
@@ -569,7 +572,7 @@ impl EDFFile {
                         file.stream_position().map_err(EDFError::FileWriteError)? + read_offset;
                     if disk_read_count > 0 {
                         let mut buffer = vec![0; disk_read_count]; // TODO: This should be a function global defined buffer
-                        file.read_exact_at(&mut buffer, current_file_position)
+                        seek_read_exact_at(&mut file, &mut buffer, current_file_position)
                             .map_err(EDFError::FileWriteError)?;
                         buffer_read.append(&mut buffer);
                     }
@@ -583,7 +586,8 @@ impl EDFFile {
                         .unwrap_or(0) as usize;
                     if read_length > 0 {
                         let mut buffer = vec![0; read_length]; // TODO: This should be a function global defined buffer
-                        file.read_exact_at(
+                        seek_read_exact_at(
+                            &mut file, 
                             &mut buffer,
                             current_file_position + disk_read_count as u64,
                         )
@@ -1074,5 +1078,27 @@ impl EDFFile {
         }
 
         self.read_nanos((seconds as f64 * 1_000_000_000.0) as u128)
+    }
+}
+
+fn seek_read_exact_at(file: &mut File, buffer: &mut Vec<u8>, offset: u64) -> Result<(), std::io::Error> {
+    #[cfg(unix)]
+    {
+        file.read_exact_at(&mut buffer, offset)
+    }
+    #[cfg(not(unix))]
+    {
+        use std::io::Read;
+
+        let original_pos = file.stream_position()?;
+        file.seek(SeekFrom::Start(offset))?;
+        let result = file.read_exact(buffer);
+        let restore = file.seek(SeekFrom::Start(original_pos));
+
+        // Raise errors after trying to restore position
+        result?;
+        restore?;
+
+        Ok(())
     }
 }
