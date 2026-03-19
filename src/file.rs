@@ -499,7 +499,7 @@ impl EDFFile {
                     if read_length > 0 {
                         let mut buffer = vec![0; read_length]; // TODO: This should be a function global defined buffer
                         seek_read_exact_at(
-                            &mut file, 
+                            &mut file,
                             &mut buffer,
                             current_file_position + disk_read_count as u64,
                         )
@@ -587,7 +587,7 @@ impl EDFFile {
                     if read_length > 0 {
                         let mut buffer = vec![0; read_length]; // TODO: This should be a function global defined buffer
                         seek_read_exact_at(
-                            &mut file, 
+                            &mut file,
                             &mut buffer,
                             current_file_position + disk_read_count as u64,
                         )
@@ -1084,7 +1084,7 @@ impl EDFFile {
 fn seek_read_exact_at(file: &mut File, buffer: &mut Vec<u8>, offset: u64) -> Result<(), std::io::Error> {
     #[cfg(unix)]
     {
-        file.read_exact_at(&mut buffer, offset)
+        file.read_exact_at(buffer, offset)
     }
     #[cfg(not(unix))]
     {
