@@ -40,7 +40,7 @@ impl std::fmt::Display for EDFError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "An error occurred during serialization/deserialization of the EDF file: {}",
+            "An error occurred during serialization/deserialization of the EDF file: {:?}",
             self
         )
     }
