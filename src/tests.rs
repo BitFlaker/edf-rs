@@ -11,7 +11,7 @@ mod file_edit_tests {
     use crate::headers::patient::{PatientId, Sex};
     use crate::headers::recording::RecordingId;
     use crate::headers::signal_header::SignalHeader;
-    use crate::record::Record;
+    use crate::record::{Record, Samples};
 
     #[test]
     fn test_remove_all_signals() {
@@ -412,7 +412,7 @@ mod file_edit_tests {
                 vec![
                     generate_default_signal1_data,
                     generate_default_signal2_data_upsampled,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                 ],
             ))
             .unwrap();
@@ -423,7 +423,7 @@ mod file_edit_tests {
                 vec![
                     generate_default_signal1_data,
                     generate_default_signal2_data_upsampled,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                 ],
             ))
             .unwrap();
@@ -434,7 +434,7 @@ mod file_edit_tests {
                 vec![
                     generate_default_signal1_data,
                     generate_default_signal2_data_upsampled,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                 ],
             ))
             .unwrap();
@@ -445,7 +445,7 @@ mod file_edit_tests {
                 vec![
                     generate_default_signal1_data,
                     generate_default_signal2_data_upsampled,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                 ],
             ))
             .unwrap();
@@ -708,7 +708,7 @@ mod file_edit_tests {
                 1,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_upsampled,
                 ],
             ))
@@ -719,7 +719,7 @@ mod file_edit_tests {
                 30,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_upsampled,
                 ],
             ))
@@ -730,7 +730,7 @@ mod file_edit_tests {
                 2,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_upsampled,
                 ],
             ))
@@ -741,7 +741,7 @@ mod file_edit_tests {
                 31,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_upsampled,
                 ],
             ))
@@ -752,7 +752,7 @@ mod file_edit_tests {
                 4,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_upsampled,
                 ],
             ))
@@ -830,7 +830,7 @@ mod file_edit_tests {
                 1,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_downsampled,
                 ],
             ))
@@ -841,7 +841,7 @@ mod file_edit_tests {
                 30,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_downsampled,
                 ],
             ))
@@ -852,7 +852,7 @@ mod file_edit_tests {
                 2,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_downsampled,
                 ],
             ))
@@ -863,7 +863,7 @@ mod file_edit_tests {
                 31,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_downsampled,
                 ],
             ))
@@ -874,7 +874,7 @@ mod file_edit_tests {
                 4,
                 vec![
                     generate_default_signal1_data,
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal2_data_downsampled,
                 ],
             ))
@@ -1257,7 +1257,7 @@ mod file_edit_tests {
                 &edf_expected,
                 1,
                 vec![
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal1_data,
                     generate_default_signal2_data,
                 ],
@@ -1268,7 +1268,7 @@ mod file_edit_tests {
                 &edf_expected,
                 30,
                 vec![
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal1_data,
                     generate_default_signal2_data,
                 ],
@@ -1279,7 +1279,7 @@ mod file_edit_tests {
                 &edf_expected,
                 2,
                 vec![
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal1_data,
                     generate_default_signal2_data,
                 ],
@@ -1290,7 +1290,7 @@ mod file_edit_tests {
                 &edf_expected,
                 31,
                 vec![
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal1_data,
                     generate_default_signal2_data,
                 ],
@@ -1301,7 +1301,7 @@ mod file_edit_tests {
                 &edf_expected,
                 4,
                 vec![
-                    |_| repeat_n(0, 200).collect(),
+                    |_| Samples::Values16Bit(repeat_n(0, 200).collect()),
                     generate_default_signal1_data,
                     generate_default_signal2_data,
                 ],
@@ -1714,10 +1714,10 @@ mod file_edit_tests {
     }
 
     fn generate_default_annotations() -> SignalHeader {
-        SignalHeader::new_annotation(80)
+        SignalHeader::new_annotation(80, EDFSpecifications::EDF)
     }
 
-    fn generate_custom_signal_record<T: Fn(usize) -> Vec<i16>>(
+    fn generate_custom_signal_record<T: Fn(usize) -> Samples>(
         edf: &EDFFile,
         index: usize,
         samples: Vec<T>,
@@ -1744,22 +1744,22 @@ mod file_edit_tests {
         record
     }
 
-    fn generate_default_signal2_data_upsampled(index: usize) -> Vec<i16> {
+    fn generate_default_signal2_data_upsampled(index: usize) -> Samples {
         let mut default_data = generate_default_signal2_data(index);
-        default_data.extend(repeat_n(0, 210 - default_data.len()));
+        assert!(default_data.extend(&Samples::Values16Bit(repeat_n(0, 210 - default_data.len()).collect())).is_ok());
         default_data
     }
 
-    fn generate_default_signal2_data_downsampled(index: usize) -> Vec<i16> {
-        ((0 + 25 * index as i16)..(61 + 25 * index as i16)).collect()
+    fn generate_default_signal2_data_downsampled(index: usize) -> Samples {
+        Samples::Values16Bit(((0 + 25 * index as i16)..(61 + 25 * index as i16)).collect())
     }
 
-    fn generate_default_signal2_data(index: usize) -> Vec<i16> {
-        ((0 + 25 * index as i16)..(127 + 25 * index as i16)).collect()
+    fn generate_default_signal2_data(index: usize) -> Samples {
+        Samples::Values16Bit(((0 + 25 * index as i16)..(127 + 25 * index as i16)).collect())
     }
 
-    fn generate_default_signal1_data(index: usize) -> Vec<i16> {
-        ((0 + 25 * index as i16)..(100 + 25 * index as i16)).collect()
+    fn generate_default_signal1_data(index: usize) -> Samples {
+        Samples::Values16Bit(((0 + 25 * index as i16)..(100 + 25 * index as i16)).collect())
     }
 
     fn configure_default_header(edf_header: &mut EDFHeader) {
@@ -1831,8 +1831,42 @@ mod file_edit_tests {
 mod file_read_tests {
     use crate::file::EDFFile;
     use crate::headers::annotation_list::AnnotationList;
-    use crate::record::RelativeRecordData;
+    use crate::record::{RelativeRecordData, Samples};
     use std::error::Error;
+    use std::fs;
+
+    #[test]
+    fn test_normal_bdfp_range() -> Result<(), Box<dyn Error>> {
+        // Source for BDF files: https://www.biosemi.com/download/BDFtestfiles.zip
+        fs::copy("code_tests/BDF_2048.bdf", "code_tests/BDF_2048_modified.bdf")?;
+        let mut edf = EDFFile::open("code_tests/BDF_2048_modified.bdf")?;
+
+        for i in 0..8 {
+            let mut new_signal = edf.header.signals[i].clone();
+            println!("{}", new_signal.label);
+            new_signal.physical_minimum = -1.2;
+            new_signal.physical_maximum = -0.6;
+            edf.update_signal(i, new_signal)?;
+        }
+
+        edf.save()?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_normal_bdfp_read() -> Result<(), Box<dyn Error>> {
+        // Source for BDF files: https://www.biosemi.com/download/BDFtestfiles.zip
+        let mut edf = EDFFile::open("code_tests/BDF_2048.bdf")?;
+
+        // Read the first 10 records and check for a valid sample count
+        for _ in 0..10 {
+            let record = edf.read_record().unwrap().unwrap();
+            assert!(record.raw_signal_samples.iter().all(|s| s.len() == 2048));
+        }
+
+        Ok(())
+    }
 
     #[test]
     fn test_normal_edfp_read() -> Result<(), Box<dyn Error>> {
@@ -1845,18 +1879,18 @@ mod file_read_tests {
             vec![
                 vec![RelativeRecordData {
                     offset: 0.0,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
                         40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58,
                         59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
                         78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96,
                         97, 98, 99
-                    ]
+                    ])
                 }],
                 vec![RelativeRecordData {
                     offset: 0.0,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
                         40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58,
@@ -1864,7 +1898,7 @@ mod file_read_tests {
                         78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96,
                         97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
                         112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126
-                    ]
+                    ])
                 }],
             ]
         );
@@ -1885,17 +1919,17 @@ mod file_read_tests {
             vec![
                 vec![RelativeRecordData {
                     offset: 1.0,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                         21, 22, 23, 24
-                    ]
+                    ])
                 }],
                 vec![RelativeRecordData {
                     offset: 1.0,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30
-                    ]
+                    ])
                 }],
             ]
         );
@@ -1915,17 +1949,17 @@ mod file_read_tests {
             vec![
                 vec![RelativeRecordData {
                     offset: 1.25,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
                         44, 45, 46, 47, 48, 49
-                    ]
+                    ])
                 }],
                 vec![RelativeRecordData {
                     offset: 1.25,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
                         50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62
-                    ]
+                    ])
                 }],
             ]
         );
@@ -1945,17 +1979,17 @@ mod file_read_tests {
             vec![
                 vec![RelativeRecordData {
                     offset: 1.5,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68,
                         69, 70, 71, 72, 73, 74
-                    ]
+                    ])
                 }],
                 vec![RelativeRecordData {
                     offset: 1.5,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
                         82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94
-                    ]
+                    ])
                 }],
             ]
         );
@@ -1975,18 +2009,18 @@ mod file_read_tests {
             vec![
                 vec![RelativeRecordData {
                     offset: 1.75,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93,
                         94, 95, 96, 97, 98, 99
-                    ]
+                    ])
                 }],
                 vec![RelativeRecordData {
                     offset: 1.75,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
                         111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125,
                         126
-                    ]
+                    ])
                 }],
             ]
         );
@@ -2005,18 +2039,18 @@ mod file_read_tests {
             vec![
                 vec![RelativeRecordData {
                     offset: 2.0,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
                         40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58,
                         59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
                         78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96,
                         97, 98, 99
-                    ]
+                    ])
                 }],
                 vec![RelativeRecordData {
                     offset: 2.0,
-                    raw_signal_samples: vec![
+                    raw_signal_samples: Samples::Values16Bit(vec![
                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
                         40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58,
@@ -2024,7 +2058,7 @@ mod file_read_tests {
                         78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96,
                         97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
                         112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126
-                    ]
+                    ])
                 }],
             ]
         );

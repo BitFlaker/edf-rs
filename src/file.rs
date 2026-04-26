@@ -12,7 +12,7 @@ use crate::error::edf_error::EDFError;
 use crate::headers::annotation_list::AnnotationList;
 use crate::headers::edf_header::EDFHeader;
 use crate::headers::signal_header::SignalHeader;
-use crate::record::{Record, SpanningRecord};
+use crate::record::{Record, Samples, SpanningRecord};
 use crate::save::{SaveInstruction, SaveValue, normalize_instructions};
 use crate::utils::take_vec;
 
@@ -347,7 +347,7 @@ impl EDFFile {
 
         // Depending on the delete strategy, update EDF+ files to be discontinuous after deleting a record
         let removes_middle_record = instructions.iter().any(|i| matches!(i, SaveInstruction::Remove(idx) if *idx > 0 && *idx < self.record_counter - 1));
-        if self.header.specification == EDFSpecifications::EDFPlus
+        if (self.header.specification == EDFSpecifications::EDFPlus || self.header.specification == EDFSpecifications::BDFPlus)
             && self.header.is_continuous
             && removes_middle_record
             && self.record_delete_strategy == RecordDeleteStrategy::Discontinuous
@@ -411,7 +411,7 @@ impl EDFFile {
                         }
                     }
 
-                    file.write_all(self.header.serialize()?.as_bytes())
+                    file.write_all(&self.header.serialize()?)
                         .map_err(EDFError::FileWriteError)?;
 
                     // Require re-writing all data-records from the beginning due to a change in offset
@@ -444,8 +444,7 @@ impl EDFFile {
                     } else {
                         0
                     } as u64;
-                    let current_file_position =
-                        file.stream_position().map_err(EDFError::FileWriteError)? + read_offset;
+                    let current_file_position = file.stream_position().map_err(EDFError::FileWriteError)? + read_offset;
                     let read_max = initial_filesize.saturating_sub(current_file_position);
                     if let Ok(new_buffer_length) =
                         usize::try_from(overwrite_counter + new_record_bytes as i64)
@@ -486,8 +485,7 @@ impl EDFFile {
                     } else {
                         0
                     } as u64;
-                    let current_file_position =
-                        file.stream_position().map_err(EDFError::FileWriteError)? + read_offset;
+                    let current_file_position = file.stream_position().map_err(EDFError::FileWriteError)? + read_offset;
 
                     // Add data to overwrite buffer which would be overwritten after writing the current record
                     let read_max = initial_filesize.saturating_sub(current_file_position);
@@ -569,7 +567,8 @@ impl EDFFile {
 
                     // Read the remaining bytes of the current record from disk if it was not entirely in the buffer
                     let current_file_position =
-                        file.stream_position().map_err(EDFError::FileWriteError)? + read_offset;
+                        file.stream_position()
+                            .map_err(EDFError::FileWriteError)? + read_offset;
                     if disk_read_count > 0 {
                         let mut buffer = vec![0; disk_read_count]; // TODO: This should be a function global defined buffer
                         seek_read_exact_at(&mut file, &mut buffer, current_file_position)
@@ -615,6 +614,7 @@ impl EDFFile {
                             0,
                             &initial_signals,
                             initial_record_duration,
+                            &self.header.specification
                         )?;
                         record.patch_record(&signal_instructions)?;
                         buffer_read = record.serialize()?;
@@ -684,8 +684,8 @@ impl EDFFile {
     /// The latter assumes that all data records are sorted by time in chronological order.
     pub fn read_file_duration(&mut self) -> Result<Duration, EDFError> {
         match self.header.specification {
-            EDFSpecifications::EDF => Ok(self.get_continuous_file_duration()),
-            EDFSpecifications::EDFPlus => {
+            EDFSpecifications::EDF | EDFSpecifications::BDF => Ok(self.get_continuous_file_duration()),
+            EDFSpecifications::EDFPlus | EDFSpecifications::BDFPlus => {
                 let gap_read_offset_ns = self.gap_read_offset_ns;
                 let record_read_offset_ns = self.record_read_offset_ns;
                 let reader_pos = self.reader.stream_position().map_err(EDFError::FileReadError)?;
@@ -743,6 +743,9 @@ impl EDFFile {
         // the records would have to be able to read either from in-memory pending instructions or from disk (at the
         // correct offset). Also handle add/remove of signals to those in-memory records as well
 
+        // TODO: Check if "Trigger Status channel" is always mandatory for BDF files or if this would break
+        // many BDF files. Potentially only add optional parsing of this channel
+
         let position = self
             .reader
             .stream_position()
@@ -776,6 +779,7 @@ impl EDFFile {
             record_idx,
             &self.header.signals,
             self.header.record_duration,
+            &self.header.specification
         )?;
 
         // Patch the record to match the new signal definitions
@@ -789,19 +793,24 @@ impl EDFFile {
         record_idx: u64,
         signals: &Vec<SignalHeader>,
         record_duration: f64,
+        specification: &EDFSpecifications
     ) -> Result<Record, EDFError> {
-        let mut sample_buffer = [0; 2];
+        let sample_bytes = match specification {
+            EDFSpecifications::EDF | EDFSpecifications::EDFPlus => 2,
+            EDFSpecifications::BDF | EDFSpecifications::BDFPlus => 3
+        };
+        let mut sample_buffer = vec![0; sample_bytes];
         let mut tal_buffer = vec![];
-        let mut record = Record::new(&signals);
+        let mut record = Record::new(&signals, &specification);
         record.default_offset = record_idx as f64 * record_duration;
 
         for (i, signal) in signals.iter().enumerate() {
             if signal.is_annotation() {
-                // Samples are 16 bit integers (1 sample has 2 bytes) therefore annotation samples are * 2
-                // as only single byte values are being read
+                // Samples are 16 bit integers (1 sample has 2 bytes) for EDF and 24 bit integers (1 sample has 3 bytes) for BDF,
+                // therefore annotation samples are multiplied with the byte count as only single byte values are being read
                 let mut tals = Vec::new();
                 let mut total_read = 0;
-                while total_read < signal.samples_count * 2 {
+                while total_read < signal.samples_count * signal.annotation_char_bytes() {
                     total_read += reader
                         .read_until(b'\x00', &mut tal_buffer)
                         .map_err(EDFError::FileReadError)?;
@@ -826,13 +835,20 @@ impl EDFFile {
                 }
                 record.set_annotation(i, tals)?;
             } else {
-                let mut samples = Vec::with_capacity(signal.samples_count);
+                let mut samples = record.new_samples(i, signal.samples_count)?;
                 for _ in 0..signal.samples_count {
                     reader
                         .read_exact(&mut sample_buffer)
                         .map_err(EDFError::FileReadError)?;
-                    let sample = i16::from_le_bytes(sample_buffer);
-                    samples.push(sample);
+
+                    match &mut samples {
+                        Samples::Values16Bit(values) => {
+                            values.push(i16::from_le_bytes(sample_buffer.clone().try_into().unwrap()));
+                        },
+                        Samples::Values24Bit(values) => {
+                            values.push(i24_from_le_bytes(sample_buffer.clone().try_into().unwrap()));
+                        },
+                    }
                 }
                 record.set_samples(i, samples)?;
             }
@@ -914,7 +930,7 @@ impl EDFFile {
 
             // Get the amount of nano seconds to in between the previous record and the current
             let onset = (record.get_start_offset() * 1_000_000_000.0) as u128;
-            let skip_duration_ns = if self.header.specification == EDFSpecifications::EDF {
+            let skip_duration_ns = if self.header.specification == EDFSpecifications::EDF || self.header.specification == EDFSpecifications::BDF {
                 0
             } else if let Some(previous_onset) = &read_start_ns {
                 onset - previous_onset - record_duration_ns - self.gap_read_offset_ns
@@ -938,6 +954,7 @@ impl EDFFile {
             let record_offset_ns = if offset_current == self.record_read_offset_ns {
                 records.insert_spanning_wait(
                     record.get_start_offset() + self.record_read_offset_ns as f64 / 1_000_000_000.0,
+                    &self.header.specification
                 );
 
                 // Drop samples and annotations before and not lasting until the current offset
@@ -945,8 +962,11 @@ impl EDFFile {
                     // Remove all signal samples which are before the current read offset
                     for signal in record.raw_signal_samples.iter_mut() {
                         let sample_freq = signal.len() as f64 / self.header.record_duration;
-                        let sample_count = (nanoseconds as f64 / 1_000_000_000.0 * sample_freq).floor() as usize;
-                        signal.drain(..sample_count);
+                        let sample_count = ((self.record_read_offset_ns as f64) / 1_000_000_000.0 * sample_freq).floor() as usize;
+                        match signal {
+                            Samples::Values16Bit(samples) => { samples.drain(..sample_count); },
+                            Samples::Values24Bit(samples) => { samples.drain(..sample_count); }
+                        }
                     }
 
                     // Remove all annotations which are not record global (duration of 0) and are not
@@ -974,6 +994,7 @@ impl EDFFile {
             if skip_duration_ns != 0 && !records.is_spanning_wait() {
                 records.insert_spanning_wait(
                     record.get_start_offset() + record_offset_ns as f64 / 1_000_000_000.0,
+                    &self.header.specification
                 );
             }
 
@@ -992,7 +1013,7 @@ impl EDFFile {
             let record_remaining_ns = record_duration_ns - self.record_read_offset_ns;
             if remaining_record_ns >= record_remaining_ns {
                 for (i, signal) in record.raw_signal_samples.iter().enumerate() {
-                    records.extend_samples(i, signal.to_vec())
+                    records.extend_samples(i, signal)?;
                 }
 
                 records.annotations.extend(record.annotations);
@@ -1004,14 +1025,11 @@ impl EDFFile {
             } else {
                 for (i, signal) in record.raw_signal_samples.iter().enumerate() {
                     let sample_freq = sample_frequencies[i];
-                    let prev_sample_count =
-                        self.record_read_offset_ns as f64 / 1_000_000_000.0 * sample_freq;
-                    let current_sample_count =
-                        remaining_record_ns as f64 / 1_000_000_000.0 * sample_freq;
+                    let prev_sample_count = self.record_read_offset_ns as f64 / 1_000_000_000.0 * sample_freq;
+                    let current_sample_count = remaining_record_ns as f64 / 1_000_000_000.0 * sample_freq;
                     let total_sample_count = prev_sample_count + current_sample_count;
-                    let sample_count =
-                        (total_sample_count - prev_sample_count.floor()).floor() as usize;
-                    records.extend_samples(i, signal[..sample_count].to_vec())
+                    let sample_count = (total_sample_count - prev_sample_count.floor()).floor() as usize;
+                    records.extend_samples(i, &signal.range(..sample_count))?;
                 }
 
                 // Add all annotations which start before the end of the desired read duration
@@ -1020,8 +1038,7 @@ impl EDFFile {
                     for annotation_list in tal_list {
                         let annotation_onset_ns = (annotation_list.onset * 1_000_000_000.0) as u128;
                         let is_entire_record = annotation_list.duration == 0.0;
-                        let is_starting_until_read_end =
-                            annotation_onset_ns <= read_start_ns.unwrap() + offset_end;
+                        let is_starting_until_read_end = annotation_onset_ns <= read_start_ns.unwrap() + offset_end;
                         if is_entire_record || is_starting_until_read_end {
                             tals.push(annotation_list);
                         }
@@ -1079,6 +1096,15 @@ impl EDFFile {
 
         self.read_nanos((seconds as f64 * 1_000_000_000.0) as u128)
     }
+}
+
+fn i24_from_le_bytes(bytes: [u8; 3]) -> i32 {
+    i32::from_le_bytes([
+        bytes[0],
+        bytes[1],
+        bytes[2],
+        if bytes[2] & 0x80 != 0 { 0xFF } else { 0x00 },
+    ])
 }
 
 fn seek_read_exact_at(file: &mut File, buffer: &mut Vec<u8>, offset: u64) -> Result<(), std::io::Error> {

@@ -16,7 +16,8 @@ A pure Rust library for reading and writing EDF/EDF+ files. It aims at providing
 Here is a non-exhaustive list of all implemented and planned features for this library. If you have any ideas or suggestions, feel free to open an [issue](https://github.com/BitFlaker/edf-rs/issues) or a [pull-request](https://github.com/BitFlaker/edf-rs/pulls). Planned features are just a guideline and are not guaranteed to be added in the future.
 
 ✔ &nbsp; Reading EDF/EDF+ files \
-✔ &nbsp; Creating / Updating existing EDF/EDF+ files \
+✔ &nbsp; Reading BDF/BDF+ files \
+✔ &nbsp; Creating / Updating existing EDF/EDF+ and BDF/BDF+ files \
 ✔ &nbsp; Adding / Removing / Updating existing records and signals \
 ✔ &nbsp; Support for seeking \
 ✔ &nbsp; Reading data by custom duration (nanoseconds, seconds, etc.)
@@ -24,7 +25,7 @@ Here is a non-exhaustive list of all implemented and planned features for this l
 ⊚ &nbsp; Extensive documentation \
 ⊚ &nbsp; Examples
 
-◌ &nbsp; Support for BDF/BDF+ files and EDF extensions \
+◌ &nbsp; Support for EDF extensions \
 ◌ &nbsp; Conversion from (and maybe to) other formats (e.g. [OpenBCI Recordings](https://docs.openbci.com/Software/OpenBCISoftware/GUIDocs/#exported-data)) \
 ◌ &nbsp; Additional features (e.g. merging files, etc.)
 

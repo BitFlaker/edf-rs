@@ -23,7 +23,10 @@ impl RecordingId {
         let parts = value.split_ascii_whitespace().collect::<Vec<_>>();
 
         // Parse patient id based on EDF+ spec if it is valid
-        if *spec == EDFSpecifications::EDFPlus && parts.len() >= 5 && parts[0] == "Startdate" {
+        if (*spec == EDFSpecifications::EDFPlus || *spec == EDFSpecifications::BDFPlus) &&
+            parts.len() >= 5 &&
+            (parts[0] == "Startdate" || parts[0] == "X")    // Some files indicate missing Startdate by replacing the text "Startdate" with "X"
+        {
             return Ok(RecordingId {
                 startdate: deserialize_field(parts[1])
                     .map(|v| NaiveDate::parse_from_str(&v, "%d-%b-%Y"))
@@ -37,7 +40,7 @@ impl RecordingId {
         }
 
         // Parse patient id based on EDF spec
-        if *spec == EDFSpecifications::EDF {
+        if *spec == EDFSpecifications::EDF || *spec == EDFSpecifications::BDF {
             let mut recording = RecordingId::default();
             recording.admin_code = if value.is_empty() { None } else { Some(value) };
             return Ok(recording);
@@ -48,8 +51,8 @@ impl RecordingId {
 
     pub fn serialize(&self, spec: &EDFSpecifications) -> Result<String, EDFError> {
         let value = match spec {
-            EDFSpecifications::EDF => self.admin_code.clone().unwrap_or_default(),
-            EDFSpecifications::EDFPlus => {
+            EDFSpecifications::EDF | EDFSpecifications::BDF => self.admin_code.clone().unwrap_or_default(),
+            EDFSpecifications::EDFPlus | EDFSpecifications::BDFPlus => {
                 let startdate = serialize_field(self.startdate.map(|d| d.format("%d-%b-%Y").to_string().to_uppercase()));
                 let admin_code = serialize_field(self.admin_code.clone());
                 let technician = serialize_field(self.technician.clone());

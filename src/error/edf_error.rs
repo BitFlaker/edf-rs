@@ -32,6 +32,7 @@ pub enum EDFError {
     ItemNotFound,
     IndexOutOfBounds,
     InvalidRecordSignals,
+    MismatchedSampleBits
 }
 
 impl Error for EDFError {}

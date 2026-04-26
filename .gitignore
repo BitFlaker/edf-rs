@@ -21,3 +21,5 @@ target
 #.idea/
 
 .vscode
+code_tests/OpenBCI*.bdf
+code_tests/BDF_*.bdf

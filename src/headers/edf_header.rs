@@ -71,7 +71,7 @@ impl EDFHeader {
 
     pub fn with_specification(&mut self, specification: EDFSpecifications) -> &mut Self {
         self.specification = specification;
-        self.is_continuous = self.specification == EDFSpecifications::EDF || self.is_continuous;
+        self.is_continuous = self.specification == EDFSpecifications::EDF || self.specification == EDFSpecifications::BDF || self.is_continuous;
         self
     }
 
@@ -143,7 +143,11 @@ impl EDFHeader {
     }
 
     pub fn data_record_bytes(&self) -> usize {
-        self.signals.iter().map(|s| s.samples_count * 2).sum()
+        let sample_bytes = match self.specification {
+            EDFSpecifications::EDF | EDFSpecifications::EDFPlus => 2,
+            EDFSpecifications::BDF | EDFSpecifications::BDFPlus => 3
+        };
+        self.signals.iter().map(|s| s.samples_count * sample_bytes).sum()
     }
 
     pub fn get_signal_sample_frequency(&self, signal_index: usize) -> Option<f64> {
@@ -182,7 +186,7 @@ impl EDFHeader {
     }
 
     pub fn create_record(&self) -> Record {
-        Record::new(self.updated_signals.as_ref().unwrap_or(&self.signals))
+        Record::new(self.updated_signals.as_ref().unwrap_or(&self.signals), &self.specification)
     }
 
     pub(crate) fn modify_signals(&mut self) -> &mut Vec<SignalHeader> {
@@ -192,8 +196,20 @@ impl EDFHeader {
         self.updated_signals.as_mut().unwrap()
     }
 
-    pub fn serialize(&self) -> Result<String, EDFError> {
-        let version = pad_string(&self.version, 8)?;
+    pub fn serialize_version(&self) -> Result<Vec<u8>, EDFError> {
+        if self.specification == EDFSpecifications::BDF {
+            let mut version: Vec<u8> = "BIOSEMI".bytes().collect();
+            // Version byte (255)
+            let version_byte = self.version.parse::<u8>().map_err(|_| EDFError::IllegalCharacters).unwrap();
+            version.insert(0, version_byte);
+            Ok(version)
+        } else {
+            Ok(pad_string(&self.version, 8)?.into_bytes())
+        }
+    }
+
+    pub fn serialize(&self) -> Result<Vec<u8>, EDFError> {
+        let version = self.serialize_version()?;
         let user_id = pad_string(&self.patient_id.serialize(&self.specification)?, 80)?;
         let recording_id = pad_string(&self.recording_id.serialize(&self.specification)?, 80)?;
         let start_date = pad_string(&Self::serialize_old_start_date(&self.start_date), 8)?;
@@ -203,6 +219,9 @@ impl EDFHeader {
                 EDFSpecifications::EDF => "",
                 EDFSpecifications::EDFPlus if self.is_continuous => "EDF+C",
                 EDFSpecifications::EDFPlus => "EDF+D",
+                EDFSpecifications::BDF => "24BIT",
+                EDFSpecifications::BDFPlus if self.is_continuous => "BDF+C",
+                EDFSpecifications::BDFPlus => "BDF+D",
             },
             44,
         )?;
@@ -219,8 +238,8 @@ impl EDFHeader {
 
         // Write general header values
         let mut header = format!(
-            "{}{}{}{}{}{}{}{}{}",
-            version,
+            "{}{}{}{}{}{}{}{}",
+            // version (added after ASCII validation) [0..8]
             user_id,
             recording_id,
             start_date,
@@ -235,7 +254,7 @@ impl EDFHeader {
         let signals = self.signals.clone();
 
         // Ensure an EDF+ file has at least 1 annotation signal
-        if self.specification == EDFSpecifications::EDFPlus
+        if (self.specification == EDFSpecifications::EDFPlus || self.specification == EDFSpecifications::BDFPlus)
             && !signals.iter().any(|s| s.is_annotation())
         {
             return Err(EDFError::MissingAnnotations);
@@ -292,15 +311,18 @@ impl EDFHeader {
         }
 
         // Get final header length and insert it into the header
-        let header_bytes = header.len() + 8;
-        header.insert_str(184, &pad_string(&header_bytes.to_string(), 8)?);
+        let header_bytes = header.len() + 8 + version.len();
+        header.insert_str(176, &pad_string(&header_bytes.to_string(), 8)?);
 
         // Ensure the serialized value only contains valid printable ASCII characters
         if !is_printable_ascii(&header) {
             return Err(EDFError::InvalidASCII);
         }
 
-        Ok(header)
+        let mut header_bytes = version;
+        header_bytes.extend(header.into_bytes());
+
+        Ok(header_bytes)
     }
 
     pub fn deserialize<R: BufRead + Seek>(reader: &mut R) -> Result<Self, EDFError> {
@@ -310,24 +332,35 @@ impl EDFHeader {
             .map_err(EDFError::FileReadError)?;
         let reserved = read_ascii(reader, 44)?;
 
-        // Distinguish between Pro and Basic specification
+        // Distinguish between EDF/BDF and EDF+/BDF+ specifications
         let is_continuous_edfplus = reserved.starts_with("EDF+C");
         let is_discontinuous_edfplus = reserved.starts_with("EDF+D");
-        let is_pro = is_continuous_edfplus || is_discontinuous_edfplus;
-        let specification = if is_pro {
+
+        let is_biosemi = reserved.starts_with("24BIT");
+        let is_continuous_bdfplus = reserved.starts_with("BDF+C");
+        let is_discontinuous_bdfplus = reserved.starts_with("BDF+D");
+
+        let is_bdf = is_biosemi || is_continuous_bdfplus || is_discontinuous_bdfplus;
+        let is_plus = is_continuous_edfplus || is_discontinuous_edfplus || is_continuous_bdfplus || is_discontinuous_bdfplus;
+
+        let specification = if is_bdf && is_plus {
+            EDFSpecifications::BDFPlus
+        } else if is_bdf {
+            EDFSpecifications::BDF
+        } else if is_plus {
             EDFSpecifications::EDFPlus
         } else {
             EDFSpecifications::EDF
         };
 
         // Check if data is expected to be continuous based on header
-        let is_continuous = is_continuous_edfplus || !is_pro;
+        let is_continuous = is_continuous_edfplus || is_continuous_bdfplus || !is_plus;
 
         // Seek back to the beginning of the file and parse general header values
         reader
             .seek(SeekFrom::Start(0))
             .map_err(EDFError::FileReadError)?;
-        let version = read_ascii(reader, 8)?.trim_ascii_end().to_string();
+        let version = read_version(reader, &specification)?;
         let patient_id = PatientId::deserialize(
             read_ascii(reader, 80)?.trim_ascii_end().to_string(),
             &specification,
@@ -348,8 +381,12 @@ impl EDFHeader {
             .map_err(EDFError::FileReadError)?;
 
         let record_count = usize::from_str(&read_ascii(reader, 8)?.trim_ascii_end()).ok();
+
+        // Duration in seconds
+        //   EDF/EDF+: Should be a whole number, except if the data-record size would exceed 61440 bytes. Then it should be smaller e.g. 0.01
+        //   BDF/BDF+: Can be anything above 0, the max data-record size is 15 MB.
         let record_duration = f64::from_str(&read_ascii(reader, 8)?.trim_ascii_end())
-            .map_err(|_| EDFError::InvalidRecordDuration)?; // Duration in seconds (should be whole number, except if data-record size would exceed 61440 bytes. The it should be smaller e.g. 0.01 (dot separator ALWAYS !))
+            .map_err(|_| EDFError::InvalidRecordDuration)?;
         let signal_count = usize::from_str(&read_ascii(reader, 4)?.trim_ascii_end())
             .map_err(|_| EDFError::InvalidSignalCount)?;
 
@@ -440,7 +477,7 @@ impl EDFHeader {
     pub fn get_sha256(&self) -> Result<String, EDFError> {
         let serialized = self.serialize()?;
         let mut hasher = Sha256::new();
-        hasher.update(serialized.as_bytes());
+        hasher.update(serialized);
         let result = hasher.finalize();
         Ok(format!("{:x}", result))
     }
@@ -502,6 +539,25 @@ impl EDFHeader {
     }
 }
 
+pub fn read_version<'a, R: BufRead>(reader: &'a mut R, specification: &EDFSpecifications) -> Result<String, EDFError> {
+    Ok(match specification {
+        EDFSpecifications::BDF | EDFSpecifications::BDFPlus => read_biosemi_version(reader)?,
+        EDFSpecifications::EDF | EDFSpecifications::EDFPlus => read_ascii(reader, 8)?.trim_ascii_end().to_string()
+    })
+}
+
+pub fn read_biosemi_version<'a, R: BufRead>(reader: &'a mut R) -> Result<String, EDFError> {
+    let mut byte = vec![0; 1];
+    reader
+        .read_exact(&mut byte)
+        .map_err(EDFError::FileReadError)?;
+
+    // Read string "BIOSEMI"
+    let _file_type = read_ascii(reader, 7)?;
+
+    Ok(byte[0].to_string())
+}
+
 pub fn read_ascii<'a, R: BufRead>(reader: &'a mut R, count: usize) -> Result<String, EDFError> {
     let mut buf = vec![0; count];
     reader
@@ -541,7 +597,7 @@ mod tests {
         let value = value.unwrap();
         let serialized = value.serialize();
         assert!(serialized.is_ok());
-        assert_eq!(serialized.unwrap(), test_header);
+        assert_eq!(serialized.unwrap(), test_header.into_bytes());
     }
 
     #[test]
@@ -621,6 +677,6 @@ mod tests {
         assert!(value.is_ok());
         let value = value.unwrap();
         assert_eq!(value, expected);
-        assert_eq!(value.serialize().unwrap(), test_header);
+        assert_eq!(value.serialize().unwrap(), test_header.into_bytes());
     }
 }

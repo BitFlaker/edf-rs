@@ -24,7 +24,7 @@ use chrono::{NaiveDate, NaiveTime};
 
 use edf_rs::EDFSpecifications;
 use edf_rs::file::EDFFile;
-use edf_rs::record::Record;
+use edf_rs::record::{Samples, Record};
 use edf_rs::headers::patient::{PatientId, Sex};
 use edf_rs::headers::recording::RecordingId;
 use edf_rs::headers::signal_header::SignalHeader;
@@ -67,7 +67,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Insert the regular and the annotation signals
     edf.insert_signal(0, signal).unwrap();
-    edf.insert_signal(1, SignalHeader::new_annotation(80)).unwrap();
+    edf.insert_signal(1, SignalHeader::new_annotation(80, EDFSpecifications::EDFPlus)).unwrap();
 
     // Insert some data-records
     edf.append_record(generate_record(&edf, 0)).unwrap();
@@ -85,7 +85,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn generate_record(edf: &EDFFile, index: usize) -> Record {
     let mut record = edf.header.create_record();
     record.raw_signal_samples = vec![
-        (0..100).collect()
+        Samples::Values16Bit((0..100).collect())
     ];
     record.annotations = vec![vec![
         AnnotationList::new(0.0 + index as f64, 0.0, vec![
@@ -106,6 +106,7 @@ print the header, all annotations and the maximum values of each signal in every
 
 ```no_run
 use edf_rs::file::EDFFile;
+use edf_rs::record::Samples;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load the EDF+ file from any path
@@ -129,8 +130,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Do something with the signals. The order of the signals
         // is the same as the signals in the header
-        let max_signal_values: Vec<i16> = record.raw_signal_samples.into_iter()
-            .map(|samples| samples.into_iter().max().unwrap_or(0))
+        let max_signal_values: Vec<i32> = record.raw_signal_samples.into_iter()
+            .map(|samples| match samples {
+                Samples::Values16Bit(samples) => samples.into_iter().max().unwrap_or(0) as i32,
+                Samples::Values24Bit(samples) => samples.into_iter().max().unwrap_or(0),
+            })
             .collect();
         println!("Max values: {:?}", max_signal_values)
     }
@@ -158,4 +162,10 @@ pub enum EDFSpecifications {
     #[default]
     /// The extended EDF specification from 2003. See the official specifications [here](https://www.edfplus.info/specs/edfplus.html).
     EDFPlus,
+
+    /// The 24 bit version of the EDF format. See the official BioSemi Data Format specifications [here](https://www.biosemi.com/faq/file_format.htm).
+    BDF,
+
+    /// The 24 bit version of the EDF+ format. See the specifications [here](https://www.teuniz.net/edfbrowser/bdfplus%20format%20description.html).
+    BDFPlus,
 }

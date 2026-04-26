@@ -25,7 +25,7 @@ impl PatientId {
         let parts = value.split_ascii_whitespace().collect::<Vec<_>>();
 
         // Parse user id based on EDF+ spec if it is valid
-        if *spec == EDFSpecifications::EDFPlus && parts.len() >= 4 {
+        if (*spec == EDFSpecifications::EDFPlus || *spec == EDFSpecifications::BDFPlus) && parts.len() >= 4 {
             return Ok(PatientId {
                 code: deserialize_field(parts[0]),
                 sex: deserialize_field(parts[1])
@@ -41,7 +41,7 @@ impl PatientId {
         }
 
         // Parse user id based on EBasic spec
-        if *spec == EDFSpecifications::EDF {
+        if *spec == EDFSpecifications::EDF || *spec == EDFSpecifications::BDF {
             let mut user = PatientId::default();
             user.name = if value.is_empty() { None } else { Some(value) };
             return Ok(user);
@@ -52,8 +52,8 @@ impl PatientId {
 
     pub fn serialize(&self, spec: &EDFSpecifications) -> Result<String, EDFError> {
         let value = match spec {
-            EDFSpecifications::EDF => self.name.clone().unwrap_or_default(),
-            EDFSpecifications::EDFPlus => {
+            EDFSpecifications::EDF | EDFSpecifications::BDF => self.name.clone().unwrap_or_default(),
+            EDFSpecifications::EDFPlus | EDFSpecifications::BDFPlus => {
                 let code = serialize_field(self.code.clone());
                 let u_type = serialize_field(self.sex.as_ref().map(|t| t.to_string()));
                 let date = serialize_field(

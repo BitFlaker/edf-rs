@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::ops::{Bound, RangeBounds};
 
+use crate::EDFSpecifications;
 use crate::error::edf_error::EDFError;
 use crate::headers::annotation_list::AnnotationList;
 use crate::headers::edf_header::EDFHeader;
@@ -19,15 +21,66 @@ enum SignalType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Samples {
+    Values16Bit(Vec<i16>),
+    Values24Bit(Vec<i32>),
+}
+
+impl Samples {
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Values16Bit(samples) => samples.len(),
+            Self::Values24Bit(samples) => samples.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Values16Bit(samples) => samples.is_empty(),
+            Self::Values24Bit(samples) => samples.is_empty(),
+        }
+    }
+
+    pub fn extend(&mut self, samples: &Samples) -> Result<(), EDFError> {
+        match (self, samples) {
+            (Self::Values16Bit(self_samples), Self::Values16Bit(samples)) => self_samples.extend(samples),
+            (Self::Values24Bit(self_samples), Self::Values24Bit(samples)) => self_samples.extend(samples),
+            _ => return Err(EDFError::MismatchedSampleBits)
+        }
+
+        Ok(())
+    }
+
+    pub fn range<R: RangeBounds<usize>>(&self, range: R) -> Samples {
+        let start = match range.start_bound() {
+            Bound::Included(&n) => n,
+            Bound::Excluded(&n) => n + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            Bound::Included(&n) => Some(n + 1),
+            Bound::Excluded(&n) => Some(n),
+            Bound::Unbounded => None,
+        };
+
+        match self {
+            Self::Values16Bit(samples) => Self::Values16Bit(samples[start..end.unwrap_or(samples.len())].to_vec()),
+            Self::Values24Bit(samples) => Self::Values24Bit(samples[start..end.unwrap_or(samples.len())].to_vec()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Record {
     layout: RecordLayout,
+    specification: EDFSpecifications,
     pub(crate) default_offset: f64,
-    pub raw_signal_samples: Vec<Vec<i16>>,
+    pub raw_signal_samples: Vec<Samples>,
     pub annotations: Vec<Vec<AnnotationList>>,
 }
 
 impl Record {
-    pub fn new(signal_headers: &Vec<SignalHeader>) -> Self {
+    pub fn new(signal_headers: &Vec<SignalHeader>, specification: &EDFSpecifications) -> Self {
         let mut raw_signal_samples = Vec::new();
         let mut annotations = Vec::new();
         let mut annotation_samples_count = Vec::new();
@@ -39,7 +92,10 @@ impl Record {
                 annotations.push(Vec::new());
             } else {
                 signal_map.insert(i, SignalType::Samples(raw_signal_samples.len()));
-                raw_signal_samples.push(vec![0; signal.samples_count]);
+                raw_signal_samples.push(match specification {
+                    EDFSpecifications::EDF | EDFSpecifications::EDFPlus => Samples::Values16Bit(vec![0; signal.samples_count]),
+                    EDFSpecifications::BDF | EDFSpecifications::BDFPlus => Samples::Values24Bit(vec![0; signal.samples_count])
+                });
             }
         }
 
@@ -48,10 +104,26 @@ impl Record {
                 signal_map,
                 annotation_samples_count,
             },
+            specification: specification.clone(),
             default_offset: 0.0,
             raw_signal_samples,
             annotations,
         }
+    }
+
+    pub fn new_samples(&self, signal_index: usize, capacity: usize) -> Result<Samples, EDFError> {
+        let Some(SignalType::Samples(idx)) = self.layout.signal_map.get(&signal_index) else {
+            return Err(EDFError::ItemNotFound);
+        };
+
+        let Some(samples) = self.raw_signal_samples.get(*idx) else {
+            return Err(EDFError::ItemNotFound);
+        };
+
+        Ok(match samples {
+            Samples::Values16Bit(_) => Samples::Values16Bit(Vec::with_capacity(capacity)),
+            Samples::Values24Bit(_) => Samples::Values24Bit(Vec::with_capacity(capacity)),
+        })
     }
 
     pub fn patch_record(&mut self, instructions: &Vec<SaveInstruction>) -> Result<(), EDFError> {
@@ -116,8 +188,10 @@ impl Record {
             .insert(signal_index, SignalType::Samples(insert_idx));
 
         // Insert the new annotation signal values
-        self.raw_signal_samples
-            .insert(insert_idx, vec![0; samples_count]);
+        self.raw_signal_samples.insert(insert_idx, match self.specification {
+            EDFSpecifications::EDF | EDFSpecifications::EDFPlus => Samples::Values16Bit(vec![0; samples_count]),
+            EDFSpecifications::BDF | EDFSpecifications::BDFPlus => Samples::Values24Bit(vec![0; samples_count])
+        });
 
         Ok(())
     }
@@ -175,10 +249,10 @@ impl Record {
     ) -> Result<(), EDFError> {
         match self.layout.signal_map.get(&signal_index) {
             Some(SignalType::Samples(idx)) => {
-                if let Some(count) = self.raw_signal_samples.get_mut(*idx) {
-                    count.resize(samples_count, 0);
-                } else {
-                    return Err(EDFError::ItemNotFound);
+                match self.raw_signal_samples.get_mut(*idx) {
+                    Some(Samples::Values16Bit(values)) => values.resize(samples_count, 0),
+                    Some(Samples::Values24Bit(values)) => values.resize(samples_count, 0),
+                    _ => return Err(EDFError::ItemNotFound)
                 }
             }
             Some(SignalType::Annotation(idx)) => {
@@ -212,7 +286,7 @@ impl Record {
         Ok(())
     }
 
-    pub fn set_samples(&mut self, signal_index: usize, samples: Vec<i16>) -> Result<(), EDFError> {
+    pub fn set_samples(&mut self, signal_index: usize, samples: Samples) -> Result<(), EDFError> {
         let Some(SignalType::Samples(idx)) = self.layout.signal_map.get(&signal_index) else {
             return Err(EDFError::ItemNotFound);
         };
@@ -232,9 +306,10 @@ impl Record {
 
     pub fn get_digital_samples(&self, signal: &SignalHeader) -> Vec<Vec<i32>> {
         self.raw_signal_samples.iter().map(|signals| {
-            signals.iter().map(|sample| {
-                (*sample as i32).clamp(signal.digital_minimum, signal.digital_maximum)
-            }).collect()
+            match signals {
+                Samples::Values16Bit(samples) => signal.to_digital_samples(samples),
+                Samples::Values24Bit(samples) => signal.to_digital_samples(samples),
+            }
         }).collect()
     }
 
@@ -243,11 +318,10 @@ impl Record {
         let offset = signal.physical_maximum / range - signal.digital_maximum as f64;
 
         self.raw_signal_samples.iter().map(|signals| {
-            signals.iter().map(|sample| {
-                let digital = *sample as f64;
-                let physical = range * (offset + digital);
-                physical.clamp(signal.physical_minimum, signal.physical_maximum)
-            }).collect()
+            match signals {
+                Samples::Values16Bit(samples) => signal.to_physical_samples(samples, range, offset),
+                Samples::Values24Bit(samples) => signal.to_physical_samples(samples, range, offset),
+            }
         }).collect()
     }
 
@@ -309,6 +383,10 @@ impl Record {
     }
 
     pub fn serialize(&self) -> Result<Vec<u8>, EDFError> {
+        let sample_bytes = match self.specification {
+            EDFSpecifications::EDF | EDFSpecifications::EDFPlus => 2,
+            EDFSpecifications::BDF | EDFSpecifications::BDFPlus => 3
+        };
         let mut result_buffer = vec![];
 
         for signal_idx in 0..self.layout.signal_map.len() {
@@ -323,19 +401,16 @@ impl Record {
                             .collect::<Vec<_>>()
                             .join("");
                         let mut tal_bytes = tals.as_bytes().to_vec();
-                        tal_bytes.extend(vec![0; 2 * sample_count - tal_bytes.len()]);
+                        tal_bytes.extend(vec![0; sample_bytes * sample_count - tal_bytes.len()]);
                         result_buffer.extend(tal_bytes);
                     }
                 }
                 Some(SignalType::Samples(idx)) => {
                     if let Some(signal) = self.raw_signal_samples.get(*idx) {
-                        result_buffer.extend(
-                            &signal
-                                .into_iter()
-                                .map(|s| s.to_le_bytes())
-                                .flatten()
-                                .collect::<Vec<_>>(),
-                        );
+                        result_buffer.extend(match signal {
+                            Samples::Values16Bit(samples) => samples.into_iter().map(|s| s.to_le_bytes()).flatten().collect::<Vec<_>>(),
+                            Samples::Values24Bit(samples) => samples.into_iter().map(|s| i24_to_le_bytes(s)).flatten().collect::<Vec<_>>()
+                        });
                     }
                 }
                 _ => {
@@ -394,35 +469,43 @@ impl Record {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+fn i24_to_le_bytes(value: &i32) -> [u8; 3] {
+    let bytes = value.to_le_bytes();
+    [bytes[0], bytes[1], bytes[2]]
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct RelativeRecordData {
     pub offset: f64,
-    pub raw_signal_samples: Vec<i16>,
+    pub raw_signal_samples: Samples,
 }
 
 impl RelativeRecordData {
-    pub fn new(offset: f64) -> Self {
+    pub fn new(offset: f64, specification: &EDFSpecifications) -> Self {
         Self {
             offset,
-            raw_signal_samples: Vec::new(),
+            raw_signal_samples: match specification {
+                EDFSpecifications::EDF | EDFSpecifications::EDFPlus => Samples::Values16Bit(Vec::new()),
+                EDFSpecifications::BDF | EDFSpecifications::BDFPlus => Samples::Values24Bit(Vec::new()),
+            },
         }
     }
 
     pub fn get_digital_samples(&self, signal: &SignalHeader) -> Vec<i32> {
-        self.raw_signal_samples.iter().map(|sample| {
-            (*sample as i32).clamp(signal.digital_minimum, signal.digital_maximum)
-        }).collect()
+        match &self.raw_signal_samples {
+            Samples::Values16Bit(samples) => signal.to_digital_samples(samples),
+            Samples::Values24Bit(samples) => signal.to_digital_samples(samples),
+        }
     }
 
     pub fn get_physical_samples(&self, signal: &SignalHeader) -> Vec<f64> {
         let range = (signal.physical_maximum - signal.physical_minimum) / (signal.digital_maximum - signal.digital_minimum) as f64;
         let offset = signal.physical_maximum / range - signal.digital_maximum as f64;
 
-        self.raw_signal_samples.iter().map(|sample| {
-            let digital = *sample as f64;
-            let physical = range * (offset + digital);
-            physical.clamp(signal.physical_minimum, signal.physical_maximum)
-        }).collect()
+        match &self.raw_signal_samples {
+            Samples::Values16Bit(samples) => signal.to_physical_samples(samples, range, offset),
+            Samples::Values24Bit(samples) => signal.to_physical_samples(samples, range, offset),
+        }
     }
 }
 
@@ -458,7 +541,7 @@ impl SpanningRecord {
         return false;
     }
 
-    pub fn insert_spanning_wait(&mut self, offset: f64) {
+    pub fn insert_spanning_wait(&mut self, offset: f64, specification: &EDFSpecifications) {
         self.remove_last_spanning_wait();
 
         // Check if the last spanning entry is the same offset
@@ -474,7 +557,7 @@ impl SpanningRecord {
 
         // In case it is a new offset, insert the new spanning values
         for signal in &mut self.raw_signal_samples {
-            signal.push(RelativeRecordData::new(offset));
+            signal.push(RelativeRecordData::new(offset, specification));
         }
     }
 
@@ -484,11 +567,14 @@ impl SpanningRecord {
         // Time-keeping entries.
     }
 
-    pub fn extend_samples(&mut self, signal_index: usize, samples: Vec<i16>) {
+    pub fn extend_samples(&mut self, signal_index: usize, samples: &Samples) -> Result<(), EDFError> {
         if let Some(signal) = self.raw_signal_samples.get_mut(signal_index) {
             if let Some(data) = signal.last_mut() {
-                data.raw_signal_samples.extend(samples);
+                data.raw_signal_samples.extend(samples)?;
+                return Ok(())
             }
         }
+
+        Err(EDFError::IndexOutOfBounds)
     }
 }
