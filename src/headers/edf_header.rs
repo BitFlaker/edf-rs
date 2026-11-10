@@ -43,6 +43,9 @@ impl EDFHeader {
         }
     }
 
+    /// The file version of the current EDF/BDF file.
+    /// * EDF/EDF+ files should have version 0
+    /// * BDF/BDF+ files must have version 255, otherwise you will get an `EDFError::InvalidFileVersion`
     pub fn with_version(&mut self, version: String) -> &mut Self {
         self.version = version;
         self
@@ -69,9 +72,20 @@ impl EDFHeader {
         self
     }
 
+    /// Set the file type specification.
+    /// When choosing the BDF/BDF+ file specification,
+    /// the version will be set to 255 and when
+    /// choosing the EDF/EDF+ file specification,
+    /// the file version will be set to 0
     pub fn with_specification(&mut self, specification: EDFSpecifications) -> &mut Self {
         self.specification = specification;
         self.is_continuous = self.specification == EDFSpecifications::EDF || self.specification == EDFSpecifications::BDF || self.is_continuous;
+        if self.specification == EDFSpecifications::BDF || self.specification == EDFSpecifications::BDFPlus {
+            self.version = "255".to_string();
+        }
+        else if self.specification == EDFSpecifications::EDF || self.specification == EDFSpecifications::EDFPlus {
+            self.version = "0".to_string();
+        }
         self
     }
 
@@ -199,11 +213,17 @@ impl EDFHeader {
     pub fn serialize_version(&self) -> Result<Vec<u8>, EDFError> {
         if self.specification == EDFSpecifications::BDF {
             let mut version: Vec<u8> = "BIOSEMI".bytes().collect();
-            // Version byte (255)
             let version_byte = self.version.parse::<u8>().map_err(|_| EDFError::IllegalCharacters).unwrap();
+
+            if version_byte != 255 {
+                return Err(EDFError::InvalidFileVersion);
+            }
+
             version.insert(0, version_byte);
             Ok(version)
         } else {
+            // Permitting file versions != 0 (currently only version 0 exists though for EDF files)
+
             Ok(pad_string(&self.version, 8)?.into_bytes())
         }
     }

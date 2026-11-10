@@ -19,6 +19,7 @@ pub enum EDFError {
     InvalidDigitalRange,
     InvalidSamplesCount,
     InvalidASCII,
+    InvalidFileVersion,
     IllegalCharacters,
     FieldSizeExceeded,
     SignalNotAnnotation,
